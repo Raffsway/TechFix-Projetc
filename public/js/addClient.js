@@ -167,10 +167,6 @@ document.addEventListener("DOMContentLoaded", () => {
       bairroInput.value = "";
 
       if (cepValue.length === 8) {
-        // REMOVIDO: O toast de "Buscando CEP..." que não some.
-        // O usuário verá que os campos de endereço são preenchidos (ou não) como feedback.
-        // Um toast de sucesso ou erro da busca será exibido após a tentativa.
-
         try {
           const response = await fetch(
             `https://viacep.com.br/ws/${cepValue}/json/`
@@ -183,7 +179,6 @@ document.addEventListener("DOMContentLoaded", () => {
               : `Falha ao buscar CEP (${response.status}).`;
             if (typeof window.showToast === "function")
               window.showToast(errorMessage, "error");
-            // NÃO mostrar erro no cepErrorDiv, apenas no toast
             return;
           }
           // Sucesso na busca do CEP
@@ -198,10 +193,8 @@ document.addEventListener("DOMContentLoaded", () => {
             "Não foi possível buscar o CEP. Verifique a conexão ou preencha manualmente.";
           if (typeof window.showToast === "function")
             window.showToast(warnMessage, "warn");
-          // NÃO mostrar erro no cepErrorDiv, apenas no toast
         }
       } else if (cepValue.length > 0 && cepValue.length < 8) {
-        // Mostrar erro de FORMATO no cepErrorDiv
         cepErrorDiv.textContent = "CEP inválido (deve ter 8 dígitos).";
         cepErrorDiv.className =
           "input-field-error-text text-xs mt-1 text-red-500";
@@ -245,7 +238,6 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const clearInputErrorStyle = (inputId) => {
-    // Modificado para aceitar inputId
     const inputEl = document.getElementById(inputId);
     const errorDiv = document.getElementById(`${inputId}-error`);
     if (inputEl) {
@@ -268,17 +260,29 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const displayGeneralMessage = (message, type) => {
-    /* ... (como antes) ... */
+    if (generalMessageDiv) {
+      generalMessageDiv.textContent = message;
+      generalMessageDiv.className = "form-feedback-message hidden"; // Reset classes
+      if (message && type) {
+        generalMessageDiv.classList.add(type); // 'error', 'success', 'info'
+        generalMessageDiv.classList.remove("hidden");
+      }
+    }
   };
+
   const clearGeneralMessage = () => {
-    /* ... (como antes) ... */
+    if (generalMessageDiv) {
+      generalMessageDiv.textContent = "";
+      generalMessageDiv.className = "form-feedback-message hidden";
+    }
   };
+
   const clearAllInputValidationErrors = () => {
     clearInputErrorStyle("name");
     clearInputErrorStyle("phone");
     clearInputErrorStyle("estado");
-    clearInputErrorStyle("cep"); // Limpa estilo de erro de formato do CEP
-    clearCpfErrorStyle();
+    clearInputErrorStyle("cep");
+    clearInputErrorStyle("cpf"); // CORRIGIDO: Usando clearInputErrorStyle para CPF
   };
 
   let cpfDebounceTimer;
@@ -286,10 +290,9 @@ document.addEventListener("DOMContentLoaded", () => {
     cpfInput.addEventListener("input", () => {
       clearTimeout(cpfDebounceTimer);
       const cleanedCpf = cpfInput.value.replace(/\D/g, "");
-      clearCpfErrorStyle();
+      clearInputErrorStyle("cpf"); // CORRIGIDO: Usando clearInputErrorStyle para CPF
       cpfAlreadyExists = false;
 
-      // Limpar feedback de erro do CEP se o CPF está sendo modificado
       if (cepErrorDiv && cepErrorDiv.textContent) {
         clearInputErrorStyle("cep");
       }
@@ -335,6 +338,12 @@ document.addEventListener("DOMContentLoaded", () => {
             );
           }
         }, 600);
+      } else {
+        // Limpa mensagem de verificação se o CPF não tem 11 dígitos ainda
+        if (cpfErrorDiv.textContent === "Verificando CPF...") {
+          cpfErrorDiv.textContent = "";
+          cpfErrorDiv.classList.add("hidden");
+        }
       }
     });
   }
@@ -370,12 +379,17 @@ document.addEventListener("DOMContentLoaded", () => {
         );
         isValid = false;
       } else if (
+        // Adicionado para garantir que a validação do debounce seja considerada
         cpfErrorDiv &&
-        !cpfErrorDiv.textContent.includes("disponível") &&
+        cpfErrorDiv.textContent !== "CPF disponível para novo cadastro." &&
         !cpfErrorDiv.classList.contains("hidden") &&
         cpfErrorDiv.textContent !== ""
       ) {
-        isValid = false;
+        // Se houver uma mensagem de erro ativa no CPF (que não seja a de sucesso), considera inválido
+        if (!cpfErrorDiv.textContent.includes("Verificando CPF...")) {
+          // Evita bloquear se ainda estiver verificando
+          isValid = false;
+        }
       }
 
       if (!name) {
@@ -393,12 +407,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (cep && cep.length !== 8) {
         displayInputError("cep", "CEP deve ter 8 dígitos (se preenchido).");
         isValid = false;
-      } else if (cep && cep.length === 8 && !estado) {
-        displayInputError(
-          "estado",
-          "Estado é obrigatório se o CEP foi informado e preenchido."
-        );
-        isValid = false;
+      } else if (cep && cep.length === 8 && !estado && !cidadeInput.value) {
+        // Permite cidade manual se CEP não preencheu tudo
+        // Se o CEP foi preenchido e é válido, mas não preencheu o estado automaticamente (ViaCEP falhou ou CEP incompleto)
+        // E a cidade também não foi preenchida manualmente, então o estado pode ser opcional
+        // Mas se o admin quiser preencher estado, ele pode.
+        // Vamos remover a obrigatoriedade de estado aqui se o ViaCEP não retornou.
+        // A validação do estado pode ser feita no backend se for estritamente necessária.
       }
 
       if (!isValid) {
@@ -448,7 +463,12 @@ document.addEventListener("DOMContentLoaded", () => {
           const message =
             data.message || "Informações do cliente adicionadas com sucesso!";
           if (form) form.reset();
-          clearAllInputValidationErrors();
+          clearAllInputValidationErrors(); // Limpa todos os erros, incluindo os de CPF e CEP
+          if (cpfErrorDiv) {
+            // Limpa explicitamente a mensagem de status do CPF
+            cpfErrorDiv.textContent = "";
+            cpfErrorDiv.classList.add("hidden");
+          }
           cpfAlreadyExists = false;
           if (typeof window.showToast === "function")
             window.showToast(message, "success");
