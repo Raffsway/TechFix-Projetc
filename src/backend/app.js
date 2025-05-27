@@ -9,6 +9,7 @@ const path = require("path");
 const fs = require("fs");
 const db = require("./db");
 const multer = require("multer");
+const bcrypt = require("bcryptjs");
 
 const app = express();
 
@@ -32,11 +33,9 @@ const JWT_SECRET =
 const authMiddleware = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res
-      .status(401)
-      .json({
-        message: "Acesso negado. Token não fornecido ou mal formatado.",
-      });
+    return res.status(401).json({
+      message: "Acesso negado. Token não fornecido ou mal formatado.",
+    });
   }
   const token = authHeader.split(" ")[1];
   try {
@@ -46,6 +45,16 @@ const authMiddleware = (req, res, next) => {
   } catch (error) {
     console.error("Erro na verificação do token:", error.message);
     res.status(400).json({ message: "Token inválido." });
+  }
+};
+
+const adminOnlyMiddleware = (req, res, next) => {
+  if (req.user && req.user.role === "admin") {
+    next();
+  } else {
+    res.status(403).json({
+      message: "Acesso negado. Recurso exclusivo para administradores.",
+    });
   }
 };
 
@@ -76,57 +85,85 @@ const photoUpload = multer({
 
 // AUTH
 app.post("/api/auth/register", async (req, res) => {
-  // Nome e Telefone não são mais esperados do formulário de cadastro
   const { email, password, cpf } = req.body;
+  const cleanedCpf = cpf ? cpf.replace(/\D/g, "") : null;
 
-  if (!email || !password || !cpf) {
+  if (!email || !password || !cleanedCpf) {
+    return res.status(400).json({
+      message: "Email, Senha e CPF são obrigatórios para o cadastro.",
+    });
+  }
+  if (cleanedCpf.length !== 11) {
+    return res.status(400).json({ message: "CPF deve conter 11 dígitos." });
+  }
+  if (password.length < 6) {
     return res
       .status(400)
-      .json({
-        message: "Email, Senha e CPF são obrigatórios para o cadastro.",
-      });
+      .json({ message: "Senha deve ter no mínimo 6 caracteres." });
   }
+
   try {
-    const serviceCheck = await db.query(
-      "SELECT * FROM services WHERE client_cpf = $1",
-      [cpf]
+    const emailExists = await db.query(
+      "SELECT * FROM users WHERE email = $1 AND password IS NOT NULL",
+      [email]
     );
-    if (
-      serviceCheck.rows.length === 0 &&
-      process.env.NODE_ENV !== "development_admin_seed"
-    ) {
+    if (emailExists.rows.length > 0) {
       return res
-        .status(403)
-        .json({
-          message:
-            "Cadastro não permitido. Nenhum serviço encontrado para este CPF.",
+        .status(409)
+        .json({ message: "Este email já está associado a uma conta ativa." });
+    }
+
+    const userByCpfResult = await db.query(
+      "SELECT * FROM users WHERE cpf = $1",
+      [cleanedCpf]
+    );
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    if (userByCpfResult.rows.length > 0) {
+      const existingUser = userByCpfResult.rows[0];
+      if (existingUser.email && existingUser.password) {
+        return res
+          .status(409)
+          .json({ message: "CPF já cadastrado com uma conta ativa." });
+      } else {
+        const updatedUser = await db.query(
+          "UPDATE users SET email = $1, password = $2, updated_at = CURRENT_TIMESTAMP WHERE cpf = $3 RETURNING id, name, email, cpf, phone, role, cep, estado, cidade, bairro",
+          [email, hashedPassword, cleanedCpf]
+        );
+        return res.status(200).json({
+          message: "Cadastro finalizado com sucesso!",
+          user: updatedUser.rows[0],
         });
-    }
-
-    const userExists = await db.query(
-      "SELECT * FROM users WHERE email = $1 OR cpf = $2",
-      [email, cpf]
-    );
-    if (userExists.rows.length > 0) {
-      return res.status(409).json({ message: "Email ou CPF já cadastrado." });
-    }
-    const plainPasswordForTesting = password;
-
-    // Insere NULL para 'name' e 'phone' na tabela users,
-    // pois 'name' foi alterado para NULLABLE no schema do DB.
-    // 'phone' já era NULLABLE.
-    const newUser = await db.query(
-      "INSERT INTO users (name, email, password, cpf, phone, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, email, cpf, phone, role",
-      [null, email, plainPasswordForTesting, cpf, null, "client"] // name e phone como null
-    );
-    res
-      .status(201)
-      .json({
+      }
+    } else {
+      const serviceCheck = await db.query(
+        "SELECT * FROM services WHERE client_cpf = $1",
+        [cleanedCpf]
+      );
+      if (
+        serviceCheck.rows.length === 0 &&
+        process.env.NODE_ENV !== "development_admin_seed"
+      ) {
+        return res.status(403).json({
+          message:
+            "Cadastro não permitido. Nenhum serviço encontrado para este CPF. Contate o administrador.",
+        });
+      }
+      const newUser = await db.query(
+        "INSERT INTO users (email, password, cpf, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, cpf, phone, role, cep, estado, cidade, bairro",
+        [email, hashedPassword, cleanedCpf, "client"]
+      );
+      return res.status(201).json({
         message: "Usuário cadastrado com sucesso!",
         user: newUser.rows[0],
       });
+    }
   } catch (error) {
     console.error("Erro no registro:", error);
+    if (error.code === "23505" && error.constraint === "users_email_key") {
+      return res.status(409).json({ message: "Este email já está em uso." });
+    }
     res
       .status(500)
       .json({ message: "Erro interno do servidor ao tentar registrar." });
@@ -143,26 +180,35 @@ app.post("/api/auth/login", async (req, res) => {
       email,
     ]);
     if (result.rows.length === 0) {
-      return res
-        .status(401)
-        .json({
-          message: "Email ou senha inválidos (usuário não encontrado).",
-        });
+      return res.status(401).json({
+        message: "Usuário não encontrado com este email.",
+      });
     }
     const user = result.rows[0];
-    const isMatch = password === user.password;
+
+    if (!user.password) {
+      return res.status(401).json({
+        message:
+          "Cadastro pendente. Por favor, complete seu registro na tela de 'Cadastre-se'.",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
     if (!isMatch) {
-      return res
-        .status(401)
-        .json({ message: "Email ou senha inválidos (senha não confere)." });
+      return res.status(401).json({ message: "Senha inválida." });
     }
     const tokenPayload = {
       id: user.id,
       role: user.role,
       cpf: user.cpf,
-      name: user.name, // Será null se cadastrado sem nome e não atualizado
+      name: user.name,
       email: user.email,
-      phone: user.phone, // Será null se cadastrado sem telefone e não atualizado
+      phone: user.phone,
+      cep: user.cep,
+      estado: user.estado,
+      cidade: user.cidade,
+      bairro: user.bairro,
     };
     const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: "1h" });
     res.json({ message: "Login bem-sucedido!", token, user: tokenPayload });
@@ -174,26 +220,47 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// USERS - Rota para atualizar perfil do usuário (mantida como na sua última versão)
 app.put("/api/users/profile", authMiddleware, async (req, res) => {
   const userId = req.user.id;
-  const { name, email, phone, currentPassword, newPassword } = req.body;
+  const {
+    name,
+    email,
+    phone,
+    currentPassword,
+    newPassword,
+    cep,
+    estado,
+    cidade,
+    bairro,
+  } = req.body;
 
   if (!name || !email) {
-    // Nome e email continuam obrigatórios para ATUALIZAÇÃO de perfil
     return res.status(400).json({ message: "Nome e Email são obrigatórios." });
   }
-  if (phone && phone.length > 0 && (phone.length < 10 || phone.length > 11)) {
+  const cleanedPhone = phone ? phone.replace(/\D/g, "") : null;
+  if (cleanedPhone && (cleanedPhone.length < 10 || cleanedPhone.length > 11)) {
+    return res.status(400).json({
+      message: "Telefone deve ter 10 ou 11 dígitos, ou ser deixado em branco.",
+    });
+  }
+  const cleanedCep = cep ? cep.replace(/\D/g, "") : null;
+  if (cleanedCep && cleanedCep.length !== 8) {
     return res
       .status(400)
-      .json({
-        message:
-          "Telefone deve ter 10 ou 11 dígitos, ou ser deixado em branco.",
-      });
+      .json({ message: "CEP deve ter 8 dígitos, ou ser deixado em branco." });
   }
 
   try {
-    if (email !== req.user.email) {
+    const currentUserData = await db.query(
+      "SELECT email, password FROM users WHERE id = $1",
+      [userId]
+    );
+    if (currentUserData.rows.length === 0) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+    const userFromDb = currentUserData.rows[0];
+
+    if (email !== userFromDb.email) {
       const emailExists = await db.query(
         "SELECT id FROM users WHERE email = $1 AND id != $2",
         [email, userId]
@@ -208,48 +275,52 @@ app.put("/api/users/profile", authMiddleware, async (req, res) => {
     const updateFields = [];
     const queryParams = [];
     let paramIndex = 1;
-
     updateFields.push(`name = $${paramIndex++}`);
     queryParams.push(name);
     updateFields.push(`email = $${paramIndex++}`);
     queryParams.push(email);
     updateFields.push(`phone = $${paramIndex++}`);
-    queryParams.push(phone === "" ? null : phone);
+    queryParams.push(cleanedPhone);
+    updateFields.push(`cep = $${paramIndex++}`);
+    queryParams.push(cleanedCep);
+    updateFields.push(`estado = $${paramIndex++}`);
+    queryParams.push(estado);
+    updateFields.push(`cidade = $${paramIndex++}`);
+    queryParams.push(cidade);
+    updateFields.push(`bairro = $${paramIndex++}`);
+    queryParams.push(bairro);
 
     if (newPassword) {
-      if (!currentPassword) {
-        return res
-          .status(400)
-          .json({
-            message: "Senha atual é obrigatória para definir uma nova senha.",
-          });
-      }
-      const userResult = await db.query(
-        "SELECT password FROM users WHERE id = $1",
-        [userId]
-      );
-      if (userResult.rows.length === 0)
-        return res.status(404).json({ message: "Usuário não encontrado." });
-
-      const storedPassword = userResult.rows[0].password;
-      if (currentPassword !== storedPassword) {
-        return res.status(401).json({ message: "Senha atual incorreta." });
+      if (!userFromDb.password && !currentPassword) {
+        /* Permite definir senha pela primeira vez */
+      } else if (!currentPassword && userFromDb.password) {
+        return res.status(400).json({
+          message: "Senha atual é obrigatória para definir uma nova senha.",
+        });
+      } else if (userFromDb.password) {
+        const isCurrentPasswordMatch = await bcrypt.compare(
+          currentPassword,
+          userFromDb.password
+        );
+        if (!isCurrentPasswordMatch) {
+          return res.status(401).json({ message: "Senha atual incorreta." });
+        }
       }
       if (newPassword.length < 6) {
         return res
           .status(400)
           .json({ message: "Nova senha deve ter pelo menos 6 caracteres." });
       }
+      const hashedNewPassword = await bcrypt.hash(newPassword, 10);
       updateFields.push(`password = $${paramIndex++}`);
-      queryParams.push(newPassword);
+      queryParams.push(hashedNewPassword);
     }
-
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
     queryParams.push(userId);
 
     const updateQuery = `UPDATE users SET ${updateFields.join(
       ", "
-    )} WHERE id = $${paramIndex} RETURNING id, name, email, cpf, phone, role`;
+    )} WHERE id = $${paramIndex} RETURNING id, name, email, cpf, phone, role, cep, estado, cidade, bairro`;
     const updatedUserResult = await db.query(updateQuery, queryParams);
 
     if (updatedUserResult.rows.length === 0) {
@@ -257,8 +328,10 @@ app.put("/api/users/profile", authMiddleware, async (req, res) => {
         .status(404)
         .json({ message: "Não foi possível atualizar o usuário." });
     }
-    const updatedUser = updatedUserResult.rows[0];
-    res.json({ message: "Perfil atualizado com sucesso!", user: updatedUser });
+    res.json({
+      message: "Perfil atualizado com sucesso!",
+      user: updatedUserResult.rows[0],
+    });
   } catch (error) {
     console.error("Erro ao atualizar perfil:", error);
     if (
@@ -276,8 +349,171 @@ app.put("/api/users/profile", authMiddleware, async (req, res) => {
   }
 });
 
+// --- ROTA PARA ADMIN VERIFICAR CPF ---
+app.get(
+  "/api/admin/clients/check-cpf/:cpf",
+  authMiddleware,
+  adminOnlyMiddleware,
+  async (req, res) => {
+    const { cpf } = req.params;
+    const cleanedCpf = cpf ? cpf.replace(/\D/g, "") : "";
+
+    if (!cleanedCpf || cleanedCpf.length !== 11) {
+      return res
+        .status(400)
+        .json({ message: "Formato de CPF inválido para verificação." });
+    }
+
+    try {
+      const userExistsResult = await db.query(
+        "SELECT id FROM users WHERE cpf = $1",
+        [cleanedCpf]
+      );
+      if (userExistsResult.rows.length > 0) {
+        return res
+          .status(200)
+          .json({ exists: true, message: "CPF já cadastrado no sistema." });
+      } else {
+        return res.status(200).json({ exists: false });
+      }
+    } catch (error) {
+      console.error("Erro ao verificar CPF no backend:", error);
+      res
+        .status(500)
+        .json({ message: "Erro interno do servidor ao verificar CPF." });
+    }
+  }
+);
+
+// --- ROTA PARA ADMIN ADICIONAR INFO CLIENTE (APENAS CRIAÇÃO) ---
+app.post(
+  "/api/admin/clients",
+  authMiddleware,
+  adminOnlyMiddleware,
+  async (req, res) => {
+    const { name, cpf, phone, cep, estado, cidade, bairro } = req.body;
+    const cleanedCpf = cpf ? cpf.replace(/\D/g, "") : null;
+    const cleanedPhone = phone ? phone.replace(/\D/g, "") : null;
+    const cleanedCep = cep ? cep.replace(/\D/g, "") : null;
+
+    if (!name || !cleanedCpf) {
+      return res.status(400).json({ message: "Nome e CPF são obrigatórios." });
+    }
+    if (cleanedCpf.length !== 11) {
+      return res.status(400).json({ message: "CPF deve conter 11 dígitos." });
+    }
+    if (
+      cleanedPhone &&
+      (cleanedPhone.length < 10 || cleanedPhone.length > 11)
+    ) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Telefone deve ter 10 ou 11 dígitos (ou ser deixado em branco).",
+        });
+    }
+    if (cleanedCep && cleanedCep.length !== 8) {
+      return res
+        .status(400)
+        .json({
+          message: "CEP deve ter 8 dígitos (ou ser deixado em branco).",
+        });
+    }
+
+    try {
+      // Verifica se o CPF já existe. Se sim, retorna erro 409.
+      const userExistsResult = await db.query(
+        "SELECT id FROM users WHERE cpf = $1",
+        [cleanedCpf]
+      );
+      if (userExistsResult.rows.length > 0) {
+        return res.status(409).json({
+          message:
+            "Este CPF já está cadastrado no sistema. Não é possível adicionar novamente por esta tela.",
+        });
+      }
+
+      // CPF não existe, então CRIA um novo "pré-registro"
+      const newClientInfo = await db.query(
+        "INSERT INTO users (name, cpf, phone, cep, estado, cidade, bairro, role, email, password) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, NULL) RETURNING *",
+        [
+          name,
+          cleanedCpf,
+          cleanedPhone,
+          cleanedCep,
+          estado,
+          cidade,
+          bairro,
+          "client",
+        ]
+      );
+      return res.status(201).json({
+        message:
+          "Informações do novo cliente adicionadas com sucesso! O cliente precisará se registrar para definir email e senha.",
+        client: newClientInfo.rows[0],
+      });
+    } catch (error) {
+      console.error(
+        "Erro ao adicionar informações do cliente pelo admin:",
+        error
+      );
+      //  Este erro de constraint unique_violation para CPF deve ser pego pela checagem acima.
+      if (
+        error.code === "23505" &&
+        error.constraint &&
+        error.constraint.includes("users_cpf_key")
+      ) {
+        return res
+          .status(409)
+          .json({
+            message: "Este CPF já está registrado (erro de constraint).",
+          });
+      }
+      res
+        .status(500)
+        .json({
+          message:
+            "Erro interno do servidor ao tentar adicionar informações do cliente.",
+        });
+    }
+  }
+);
+
+// Rota para buscar dados do cliente por CPF (usada no form de Novo Serviço)
+app.get(
+  "/api/clients/by-cpf/:cpf",
+  authMiddleware,
+  adminOnlyMiddleware,
+  async (req, res) => {
+    const { cpf } = req.params;
+    const cleanedCpf = cpf.replace(/\D/g, "");
+    if (cleanedCpf.length !== 11) {
+      return res.status(400).json({ message: "CPF fornecido é inválido." });
+    }
+    try {
+      // Retorna os dados incluindo email para que o frontend saiba se o cliente já se registrou completamente
+      const result = await db.query(
+        "SELECT id, name, phone, cpf, email, cep, estado, cidade, bairro FROM users WHERE cpf = $1",
+        [cleanedCpf]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message: "Nenhuma informação de cliente encontrada para este CPF.",
+        });
+      }
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error("Erro ao buscar cliente por CPF:", error);
+      res
+        .status(500)
+        .json({ message: "Erro interno do servidor ao buscar cliente." });
+    }
+  }
+);
+
 // SERVICES
-app.post("/api/services", authMiddleware, (req, res) => {
+app.post("/api/services", authMiddleware, adminOnlyMiddleware, (req, res) => {
   photoUpload.single("photo")(req, res, async function (err) {
     if (err instanceof multer.MulterError) {
       return res
@@ -288,21 +524,6 @@ app.post("/api/services", authMiddleware, (req, res) => {
         .status(400)
         .json({
           message: err.message || "Erro ao processar o arquivo de foto.",
-        });
-    }
-
-    if (req.user.role !== "admin") {
-      if (req.file)
-        fs.unlink(
-          req.file.path,
-          (unlinkErr) =>
-            unlinkErr && console.error("Erro ao deletar foto:", unlinkErr)
-        );
-      return res
-        .status(403)
-        .json({
-          message:
-            "Acesso negado. Apenas administradores podem criar serviços.",
         });
     }
 
@@ -318,15 +539,18 @@ app.post("/api/services", authMiddleware, (req, res) => {
     let photoUrl = req.file
       ? `/uploads/service_photos/${req.file.filename}`
       : null;
+    const cleanedClientCpf = clientCpf ? clientCpf.replace(/\D/g, "") : null;
+    const cleanedClientPhone = clientPhone
+      ? clientPhone.replace(/\D/g, "")
+      : null;
 
     if (
       !clientName ||
-      !clientCpf ||
+      !cleanedClientCpf ||
       !equipmentType ||
       !description ||
-      !clientPhone
+      !cleanedClientPhone
     ) {
-      // Tornando clientPhone essencial aqui
       if (req.file)
         fs.unlink(
           req.file.path,
@@ -339,9 +563,16 @@ app.post("/api/services", authMiddleware, (req, res) => {
             "Nome, Telefone, CPF do cliente, tipo de equipamento e descrição são obrigatórios.",
         });
     }
-    const cleanedClientPhone = clientPhone
-      ? clientPhone.replace(/\D/g, "")
-      : null;
+    if (cleanedClientCpf.length !== 11) {
+      if (req.file)
+        fs.unlink(
+          req.file.path,
+          (e) => e && console.error("Erro ao deletar foto:", e)
+        );
+      return res
+        .status(400)
+        .json({ message: "CPF do cliente deve ter 11 dígitos." });
+    }
     if (
       cleanedClientPhone &&
       (cleanedClientPhone.length < 10 || cleanedClientPhone.length > 11)
@@ -357,10 +588,28 @@ app.post("/api/services", authMiddleware, (req, res) => {
     }
 
     try {
+      const clientUser = await db.query(
+        "SELECT role FROM users WHERE cpf = $1",
+        [cleanedClientCpf]
+      );
+      if (clientUser.rows.length > 0 && clientUser.rows[0].role === "admin") {
+        if (req.file)
+          fs.unlink(
+            req.file.path,
+            (e) => e && console.error("Erro ao deletar foto não salva:", e)
+          );
+        return res
+          .status(403)
+          .json({
+            message:
+              "Não é permitido criar ordens de serviço para usuários administradores.",
+          });
+      }
+
       const newService = await db.query(
         "INSERT INTO services (client_cpf, client_name, client_phone, equipment_type, service_type, description, admin_id, status, photo_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *",
         [
-          clientCpf,
+          cleanedClientCpf,
           clientName,
           cleanedClientPhone,
           equipmentType,
@@ -393,43 +642,17 @@ app.post("/api/services", authMiddleware, (req, res) => {
 
 app.get("/api/services", authMiddleware, async (req, res) => {
   try {
-    let servicesQuery;
+    let query;
+    const params = [];
     if (req.user.role === "admin") {
-      // Pega client_name e client_phone diretamente da tabela services.
-      // O JOIN com users ainda pode ser feito se você quiser exibir o nome do usuário REGISTRADO,
-      // mas os dados primários do cliente para o serviço virão de s.client_name e s.client_phone.
-      servicesQuery = db.query(
-        `SELECT 
-          s.id, s.client_cpf, 
-          s.client_name,         -- Nome do cliente do serviço
-          s.client_phone,        -- Telefone do cliente do serviço
-          s.equipment_type, s.service_type, s.description, 
-          s.status, s.created_at, s.updated_at, s.admin_id, s.photo_url,
-          u.name as registered_user_name -- Nome do usuário se ele for registrado
-        FROM services s 
-        LEFT JOIN users u ON s.client_cpf = u.cpf 
-        ORDER BY s.created_at DESC`
-      );
+      query = `SELECT s.id, s.client_cpf, s.client_name, s.client_phone, s.equipment_type, s.service_type, s.description, s.status, s.created_at, s.updated_at, s.admin_id, s.photo_url, u.name as registered_user_name, u.email as registered_user_email FROM services s LEFT JOIN users u ON s.client_cpf = u.cpf ORDER BY s.created_at DESC`;
     } else {
-      servicesQuery = db.query(
-        "SELECT * FROM services WHERE client_cpf = $1 ORDER BY created_at DESC",
-        [req.user.cpf]
-      );
+      query =
+        "SELECT * FROM services WHERE client_cpf = $1 ORDER BY created_at DESC";
+      params.push(req.user.cpf);
     }
-    const { rows } = await servicesQuery;
-    // Para o admin, certificar que o nome exibido é o da tabela services, se houver
-    const processedRows = rows.map((row) => {
-      if (req.user.role === "admin") {
-        return {
-          ...row,
-          // O frontend adminDashboard.js espera 'client_name' e 'client_phone'
-          // A query já seleciona s.client_name e s.client_phone, que são os corretos.
-          // registered_user_name é apenas informativo se você quiser usá-lo.
-        };
-      }
-      return row;
-    });
-    res.json(processedRows);
+    const { rows } = await db.query(query, params);
+    res.json(rows);
   } catch (error) {
     console.error("Erro ao buscar serviços:", error);
     res
@@ -438,94 +661,77 @@ app.get("/api/services", authMiddleware, async (req, res) => {
   }
 });
 
-// Rotas PUT e DELETE para /api/services/:id permanecem como na sua última versão
-app.put("/api/services/:id/status", authMiddleware, async (req, res) => {
-  if (req.user.role !== "admin") {
-    return res
-      .status(403)
-      .json({ message: "Apenas administradores podem alterar o status." });
-  }
-  const { id } = req.params;
-  const { status } = req.body;
-  if (!status) {
-    return res.status(400).json({ message: "Novo status é obrigatório." });
-  }
-  try {
-    const updatedService = await db.query(
-      "UPDATE services SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *",
-      [status, id]
-    );
-    if (updatedService.rows.length === 0) {
-      return res.status(404).json({ message: "Serviço não encontrado." });
+app.put(
+  "/api/services/:id/status",
+  authMiddleware,
+  adminOnlyMiddleware,
+  async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    if (!status) {
+      return res.status(400).json({ message: "Novo status é obrigatório." });
     }
-    // Se a tabela services foi alterada para incluir client_name e client_phone,
-    // a resposta já os incluirá. Se você precisa do nome do usuário registrado:
-    let responseService = updatedService.rows[0];
-    if (req.user.role === "admin") {
-      const userResult = await db.query(
-        "SELECT name FROM users WHERE cpf = $1",
-        [responseService.client_cpf]
+    try {
+      const updatedService = await db.query(
+        "UPDATE services SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *",
+        [status, id]
       );
-      if (userResult.rows.length > 0) {
-        // Adiciona o nome do usuário registrado para consistência com o que o GET /api/services (admin) pode retornar
-        // Embora, para esta rota, geralmente se retorna apenas o objeto do serviço atualizado.
-        // O frontend que consome isso (adminDashboard.js no modal) já busca o nome do users via LEFT JOIN no fetchServices.
-        // Então, a resposta direta do serviço é suficiente aqui.
+      if (updatedService.rows.length === 0) {
+        return res.status(404).json({ message: "Serviço não encontrado." });
       }
+      res.json(updatedService.rows[0]);
+    } catch (error) {
+      console.error("Erro ao atualizar status do serviço:", error);
+      res.status(500).json({ message: "Erro ao atualizar status do serviço." });
     }
-    res.json(responseService);
-  } catch (error) {
-    console.error("Erro ao atualizar status do serviço:", error);
-    res.status(500).json({ message: "Erro ao atualizar status do serviço." });
   }
-});
+);
 
-app.delete("/api/services/:id", authMiddleware, async (req, res) => {
-  if (req.user.role !== "admin") {
-    return res
-      .status(403)
-      .json({ message: "Apenas administradores podem excluir serviços." });
-  }
-  const { id } = req.params;
-  try {
-    const serviceResult = await db.query(
-      "SELECT photo_url FROM services WHERE id = $1",
-      [id]
-    );
-    if (serviceResult.rows.length > 0 && serviceResult.rows[0].photo_url) {
-      const photoPath = path.join(
-        __dirname,
-        "../../public",
-        serviceResult.rows[0].photo_url
+app.delete(
+  "/api/services/:id",
+  authMiddleware,
+  adminOnlyMiddleware,
+  async (req, res) => {
+    const { id } = req.params;
+    try {
+      const serviceResult = await db.query(
+        "SELECT photo_url FROM services WHERE id = $1",
+        [id]
       );
-      if (
-        serviceResult.rows[0].photo_url.trim() !== "" &&
-        fs.existsSync(photoPath)
-      ) {
-        fs.unlink(photoPath, (err) => {
-          if (err)
-            console.error("Erro ao deletar foto do serviço:", photoPath, err);
-        });
+      if (serviceResult.rows.length > 0 && serviceResult.rows[0].photo_url) {
+        const photoPath = path.join(
+          __dirname,
+          "../../public",
+          serviceResult.rows[0].photo_url
+        );
+        if (
+          serviceResult.rows[0].photo_url.trim() !== "" &&
+          fs.existsSync(photoPath)
+        ) {
+          fs.unlink(photoPath, (err) => {
+            if (err) console.error("Erro ao deletar foto:", photoPath, err);
+          });
+        }
       }
+      const deleteOp = await db.query(
+        "DELETE FROM services WHERE id = $1 RETURNING id",
+        [id]
+      );
+      if (deleteOp.rowCount === 0) {
+        return res.status(404).json({ message: "Serviço não encontrado." });
+      }
+      res.status(200).json({ message: `Serviço #${id} excluído com sucesso.` });
+    } catch (error) {
+      console.error("Erro ao excluir serviço:", error);
+      res.status(500).json({ message: "Erro ao excluir serviço." });
     }
-    const deleteOp = await db.query(
-      "DELETE FROM services WHERE id = $1 RETURNING id",
-      [id]
-    );
-    if (deleteOp.rowCount === 0) {
-      return res.status(404).json({ message: "Serviço não encontrado." });
-    }
-    res.status(200).json({ message: `Serviço #${id} excluído com sucesso.` });
-  } catch (error) {
-    console.error("Erro ao excluir serviço:", error);
-    res.status(500).json({ message: "Erro ao excluir serviço." });
   }
-});
+);
 
-// --- Rotas para servir HTML ---
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "../../public/index.html"));
-});
+// HTML Routes
+app.get("/", (req, res) =>
+  res.sendFile(path.join(__dirname, "../../public/index.html"))
+);
 const htmlPages = [
   "login",
   "signup",
@@ -533,19 +739,18 @@ const htmlPages = [
   "client-dashboard",
   "new-service",
   "update-profile",
+  "add-client",
 ];
 htmlPages.forEach((page) => {
-  const route = `/${page}`;
-  const filePath = `../../public/html/${page}.html`;
-  app.get(route, (req, res) => {
-    res.sendFile(path.join(__dirname, filePath));
-  });
+  app.get(`/${page}`, (req, res) =>
+    res.sendFile(path.join(__dirname, `../../public/html/${page}.html`))
+  );
 });
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "../../public/html/admin-dashboard.html"));
-});
-app.get("/cliente", (req, res) => {
-  res.sendFile(path.join(__dirname, "../../public/html/client-dashboard.html"));
-});
+app.get("/admin", (req, res) =>
+  res.sendFile(path.join(__dirname, "../../public/html/admin-dashboard.html"))
+);
+app.get("/cliente", (req, res) =>
+  res.sendFile(path.join(__dirname, "../../public/html/client-dashboard.html"))
+);
 
 module.exports = app;

@@ -3,27 +3,19 @@ version: '3.8'
 services:
   postgres-db:
     image: postgres:13
-    container_name: techfix_db
+    container_name: TechFix # Você alterou de techfix_db para TechFix, o que é uma mudança válida
     restart: always
     env_file:
-      - .env # Garante que o .env da raiz (TECHFIX/.env) seja carregado
+      - .env 
     environment:
-      # Estas variáveis serão preenchidas pelos valores do ../.env
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     ports:
-      # A porta DEVE ser uma string no formato "HOST:CONTAINER" ou apenas CONTAINER (menos comum para exposição)
-      # Quando DB_PORT não é encontrado no .env, a string ficaria ":5432", o que é inválido.
-      # Para garantir que seja um número válido caso a variável não seja definida,
-      # é melhor ter um valor padrão diretamente no .env ou garantir que ele sempre exista.
-      # A forma mais segura é garantir que DB_PORT esteja no .env.
-      # Se DB_PORT está no seu .env, a linha abaixo deve funcionar.
       - "${DB_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Garanta que esta pasta exista em src/db_init_scripts/
-      - ./db_init_scripts:/docker-entrypoint-initdb.d
+      - ./db_init_scripts:/docker-entrypoint-initdb.d # Esta é a parte importante para o script SQL
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s

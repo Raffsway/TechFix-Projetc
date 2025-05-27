@@ -4,33 +4,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tech Fix - Atualizar Perfil</title>
+  <title>TechFix - Adicionar Informações do Cliente</title>
   <link rel="stylesheet" href="/css/global.css">
-  <style>
-    input[readonly],
-    textarea[readonly] {
-      background-color: #f3f4f6;
-      color: #4b5563;
-      cursor: not-allowed;
-      border-color: #d1d5db;
-    }
-
-    input[readonly]:focus,
-    textarea[readonly]:focus {
-      outline: 2px solid transparent;
-      outline-offset: 2px;
-      border-color: #d1d5db;
-      box-shadow: none;
-    }
-  </style>
 </head>
 
 <body class="auth-page-body">
   <header class="site-header bg-techfix-dark-blue text-white shadow-md fixed w-full top-0 z-40">
     <div class="container mx-auto px-4">
-      <a href="#" id="home-logo-link" class="logo-link text-2xl font-bold">TechFix</a>
+      <a href="/admin" class="logo-link text-2xl font-bold">TechFix</a>
       <div class="flex items-center gap-x-4">
-        <div id="user-menu-container" class="relative">
+        {/* nav#main-nav REMOVIDA */}
+        <div id="user-menu-container" class="relative ml-auto">
           <button id="user-menu-button"
             class="flex items-center gap-2 p-2 hover:bg-techfix-light-blue rounded-md transition-colors"
             aria-label="Menu do usuário" aria-haspopup="true" aria-expanded="false">
@@ -41,7 +25,7 @@
               <circle cx="12" cy="10" r="4" />
               <circle cx="12" cy="12" r="10" />
             </svg>
-            <span id="user-name-display" class="text-sm hidden sm:inline">Usuário</span>
+            <span id="user-name-display" class="text-sm hidden sm:inline">Admin</span>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
               class="lucide lucide-chevron-down hidden sm:inline">
@@ -53,7 +37,7 @@
             role="menu" aria-orientation="vertical" aria-labelledby="user-menu-button">
             <div class="user-dropdown-header-info">
               <p class="label">Logado como:</p>
-              <p id="user-name-dropdown" class="text-sm font-medium text-techfix-dark-blue truncate">usuario@email.com
+              <p id="user-name-dropdown" class="text-sm font-medium text-techfix-dark-blue truncate">admin@techfix.com
               </p>
             </div>
             <a href="/update-profile" class="block px-4 py-2 text-sm hover:bg-gray-100" role="menuitem">Atualizar
@@ -65,8 +49,9 @@
       </div>
     </div>
   </header>
+
   <div class="container mx-auto px-4" style="padding-top: 1.5rem;">
-    <div class="mb-6 mt-4"><a href="#" id="back-to-dashboard-main-link"
+    <div class="mb-6 mt-4"><a href="/admin"
         class="inline-flex items-center text-techfix-dark-blue hover:text-techfix-light-blue"><svg
           xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-1">
@@ -74,36 +59,36 @@
           <path d="M19 12H5" />
         </svg><span>Voltar ao painel</span></a></div>
   </div>
+
   <main class="auth-container" style="padding-top: 0;">
     <div class="auth-form-container" style="max-width: 550px;">
-      <h1 class="text-2xl">Atualizar Meu Perfil</h1>
-      <p class="text-sm text-gray-500 mb-6" id="profile-cpf-display">CPF: Carregando...</p>
-      <form id="update-profile-form" novalidate>
-        <div id="update-general-message" class="form-feedback-message hidden"></div>
-        <h2 class="text-lg font-medium mb-3 text-techfix-dark-blue border-b pb-2">Dados Pessoais</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-          <div class="form-group"><label for="name">Nome Completo <span class="text-red-500">*</span></label><input
-              type="text" id="name" name="name" placeholder="Seu nome completo" required>
-            <div id="name-update-error" class="input-field-error-text hidden"></div>
-          </div>
-          <div class="form-group"><label for="email">Email <span class="text-red-500">*</span></label><input
-              type="email" id="email" name="email" placeholder="seuemail@exemplo.com" required>
-            <div id="email-update-error" class="input-field-error-text hidden"></div>
-          </div>
+      <h1 class="text-2xl">Adicionar Novo Cliente</h1>
+      <p class="text-sm text-gray-500 mb-6">Preencha as informações abaixo. Se o CPF já existir, um aviso será exibido.
+        O cliente definirá o email e a senha ao se registrar.</p>
+      <form id="add-client-form" novalidate>
+        <div id="add-client-general-message" class="form-feedback-message hidden"></div>
+        <div class="form-group"><label for="cpf">CPF <span class="text-red-500">*</span></label><input type="text"
+            id="cpf" name="cpf" placeholder="000.000.000-00 (Apenas números)" required maxlength="14">
+          <div id="cpf-error" class="input-field-error-text hidden"></div>
         </div>
-        <div class="form-group"><label for="phone">Telefone (WhatsApp)</label><input type="tel" id="phone" name="phone"
+        <div class="form-group"><label for="name">Nome Completo <span class="text-red-500">*</span></label><input
+            type="text" id="name" name="name" placeholder="Nome do cliente" required>
+          <div id="name-error" class="input-field-error-text hidden"></div>
+        </div>
+        <div class="form-group"><label for="phone">Telefone</label><input type="tel" id="phone" name="phone"
             placeholder="(00) 00000-0000" maxlength="15">
-          <div id="phone-update-error" class="input-field-error-text hidden"></div>
+          <div id="phone-error" class="input-field-error-text hidden"></div>
         </div>
-        <h2 class="text-lg font-medium mb-3 mt-6 text-techfix-dark-blue border-b pb-2">Endereço</h2>
-        <div class="form-group"><label for="cep-update">CEP</label><input type="text" id="cep-update" name="cep"
-            placeholder="00000-000" maxlength="9">
-          <div id="cep-update-error" class="input-field-error-text hidden"></div>
+        <hr class="my-4">
+        <h2 class="text-lg font-medium mb-3 text-techfix-dark-blue">Endereço</h2>
+        <div class="form-group"><label for="cep">CEP</label><input type="text" id="cep" name="cep"
+            placeholder="00000-000 (Apenas números)" maxlength="9">
+          <div id="cep-error" class="input-field-error-text hidden"></div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-          <div class="form-group"><label for="estado-update">Estado</label><select id="estado-update" name="estado"
+          <div class="form-group"><label for="estado">Estado</label><select id="estado" name="estado"
               class="w-full border border-gray-300 rounded-md bg-white p-2 h-[2.5rem]">
-              <option value="">Selecione o Estado</option>
+              <option value="">Selecione...</option>
               <option value="AC">Acre</option>
               <option value="AL">Alagoas</option>
               <option value="AP">Amapá</option>
@@ -132,41 +117,24 @@
               <option value="SE">Sergipe</option>
               <option value="TO">Tocantins</option>
             </select>
-            <div id="estado-update-error" class="input-field-error-text hidden"></div>
+            <div id="estado-error" class="input-field-error-text hidden"></div>
           </div>
-          <div class="form-group"><label for="cidade-update">Cidade</label><input type="text" id="cidade-update"
-              name="cidade" placeholder="Ex: Aracaju">
-            <div id="cidade-update-error" class="input-field-error-text hidden"></div>
-          </div>
-        </div>
-        <div class="form-group"><label for="bairro-update">Bairro</label><input type="text" id="bairro-update"
-            name="bairro" placeholder="Ex: Centro">
-          <div id="bairro-update-error" class="input-field-error-text hidden"></div>
-        </div>
-        <hr class="my-6">
-        <h2 class="text-lg font-medium mb-1 text-techfix-dark-blue">Alterar Senha</h2>
-        <p class="text-sm text-gray-500 mb-3" id="password-instructions"></p>
-        <div class="form-group"><label for="currentPassword" id="currentPasswordLabel">Senha Atual</label><input
-            type="password" id="currentPassword" name="currentPassword" placeholder="Sua senha atual (se já definida)">
-          <div id="currentPassword-update-error" class="input-field-error-text hidden"></div>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-          <div class="form-group"><label for="newPassword">Nova Senha</label><input type="password" id="newPassword"
-              name="newPassword" placeholder="Mín. 6 caracteres" minlength="6">
-            <div id="newPassword-update-error" class="input-field-error-text hidden"></div>
-          </div>
-          <div class="form-group"><label for="confirmNewPassword">Confirmar Nova Senha</label><input type="password"
-              id="confirmNewPassword" name="confirmNewPassword" placeholder="Confirme a nova senha" minlength="6">
-            <div id="confirmNewPassword-update-error" class="input-field-error-text hidden"></div>
+          <div class="form-group"><label for="cidade">Cidade</label><input type="text" id="cidade" name="cidade"
+              placeholder="Ex: Aracaju">
+            <div id="cidade-error" class="input-field-error-text hidden"></div>
           </div>
         </div>
-        <button type="submit" class="btn btn-primary auth-submit-btn mt-4 w-full">Salvar Alterações</button>
+        <div class="form-group"><label for="bairro">Bairro</label><input type="text" id="bairro" name="bairro"
+            placeholder="Ex: Centro">
+          <div id="bairro-error" class="input-field-error-text hidden"></div>
+        </div>
+        <button type="submit" class="btn btn-primary auth-submit-btn mt-4 w-full">Adicionar Cliente</button>
       </form>
     </div>
   </main>
   <div id="toast-container" class="fixed top-4 right-4 z-50"></div>
   <script src="/js/utils.js"></script>
-  <script src="/js/updateProfile.js"></script>
+  <script src="/js/addClient.js"></script>
 </body>
 
 </html>
