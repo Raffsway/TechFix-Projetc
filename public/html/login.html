@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Tech Fix</title>
+  <link rel="stylesheet" href="/css/global.css">
+</head>
+
+<body class="auth-page-body">
+
+  <header class="site-header bg-techfix-dark-blue text-white shadow-md fixed w-full top-0 z-40">
+    <div class="container mx-auto px-4"> 
+      <a href="/" class="text-2xl font-bold">TechFix</a>
+
+      <div class="flex items-center">
+        <nav>
+          <a href="/signup" class="text-white hover:text-techfix-light-blue px-3 py-2 flex items-center"
+            style="height: 2.6rem;"> Não tem conta? Cadastre-se
+          </a>
+        </nav>
+      </div>
+
+    </div>
+  </header>
+
+  <main class="auth-container">
+    <div class="auth-form-container">
+      <h1>Entrar na sua Conta</h1>
+      <form id="login-form" novalidate>
+        <div id="login-general-message" class="form-feedback-message hidden"></div>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="seuemail@exemplo.com" required>
+          <div id="email-login-error" class="input-field-error-text hidden"></div>
+        </div>
+        <div class="form-group">
+          <label for="password">Senha</label>
+          <input type="password" id="password" name="password" placeholder="Sua senha" required>
+          <div id="password-login-error" class="input-field-error-text hidden"></div>
+        </div>
+        <button type="submit" class="btn btn-primary auth-submit-btn mt-2">Entrar</button>
+        <a href="/signup" class="form-link">Não tem uma conta? Crie uma</a>
+      </form>
+    </div>
+  </main>
+  <div id="toast-container" class="fixed top-4 right-4 z-50"></div>
+  <script src="/js/utils.js"></script>
+  <script src="/js/authService.js"></script>
+</body>
+
+</html>

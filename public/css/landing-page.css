@@ -1,0 +1,158 @@
+/* css/landing-page.css */
+
+body.landing-page-body { /* Específico para o body da landing page */
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--techfix-white); /* Fundo branco para a landing page */
+}
+
+/* Header da Landing Page */
+.landing-page-body header.bg-techfix-dark-blue {
+  /* Mantém o header padrão, mas podemos adicionar ajustes se necessário */
+}
+.nav-landing {
+  display: flex;
+  gap: 0.5rem; /* Espaçamento menor entre botões de login/cadastro */
+  align-items: center;
+}
+.nav-landing .nav-link { /* Estilo base para os links de navegação no header */
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  transition: background-color 0.2s, color 0.2s;
+  font-weight: 500;
+  font-size: 0.875rem;
+  height: 2.5rem; /* Mesma altura dos botões */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.nav-landing .login-link { /* Estilo para o link de Login */
+  color: var(--techfix-light-blue);
+  border: 1px solid var(--techfix-light-blue);
+}
+.nav-landing .login-link:hover {
+  background-color: var(--techfix-light-blue);
+  color: var(--techfix-white);
+}
+.nav-landing .signup-link.btn-secondary { /* Estilo para o botão Cadastre-se */
+  /* A classe .btn .btn-secondary do styles.css principal já deve aplicar a maioria dos estilos */
+  /* Podemos ajustar padding/altura se a regra .btn global for alterada */
+  padding: 0 1.25rem; /* Ajuste padding se necessário para altura de 2.5rem */
+}
+
+
+/* Seção Hero */
+.hero {
+  background-color: var(--techfix-dark-blue);
+  color: var(--techfix-white);
+  padding: 4rem 1rem 5rem; /* Aumentar padding inferior */
+  text-align: center;
+}
+.hero h1 {
+  font-size: 2.8rem; /* Maior */
+  font-weight: 700;
+  margin-bottom: 1rem;
+  line-height: 1.2;
+}
+.hero p {
+  font-size: 1.125rem;
+  margin-bottom: 2.5rem;
+  max-width: 650px;
+  margin-left: auto;
+  margin-right: auto;
+  opacity: 0.9;
+}
+.hero .hero-cta.btn-secondary { /* Botão principal do hero */
+  font-size: 1rem;
+  padding: 0.75rem 2rem; /* Maior padding */
+  height: auto; /* Deixa o padding controlar a altura */
+}
+
+/* Seção Features */
+.features {
+  padding: 4rem 1rem;
+  background-color: var(--techfix-white);
+}
+.features h2 {
+  text-align: center;
+  font-size: 2.25rem;
+  font-weight: 600;
+  margin-bottom: 3rem;
+  color: var(--techfix-dark-blue);
+}
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.feature-item {
+  background-color: var(--techfix-lighter-gray);
+  padding: 2rem;
+  border-radius: var(--radius);
+  /* box-shadow: var(--shadow-md); */ /* Sombra opcional */
+  border: 1px solid hsl(var(--border));
+  text-align: center;
+}
+.feature-item svg {
+  width: 48px;
+  height: 48px;
+  color: var(--techfix-light-blue);
+  margin-bottom: 1rem;
+  display: inline-block;
+}
+.feature-item h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--techfix-dark-blue);
+}
+.feature-item p {
+    font-size: 0.95rem;
+    color: hsl(var(--muted-foreground));
+    line-height: 1.6;
+}
+
+
+/* Seção CTA */
+.cta-section {
+  background-color: var(--techfix-lighter-gray);
+  padding: 4rem 1rem;
+  text-align: center;
+  border-top: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border));
+}
+.cta-section h2 {
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--techfix-dark-blue);
+}
+.cta-section p {
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+  max-width: 550px;
+  margin-left: auto;
+  margin-right: auto;
+  color: hsl(var(--muted-foreground));
+}
+.cta-section .btn { /* Ajusta altura dos botões CTA */
+    height: auto;
+    padding: 0.75rem 1.75rem;
+    font-size: 0.95rem;
+}
+
+/* Rodapé da Landing Page */
+.landing-footer {
+  background-color: var(--techfix-dark-blue);
+  color: var(--techfix-white);
+  text-align: center;
+  padding: 2rem 1rem;
+  margin-top: auto; /* Empurra para o final se landing-page-body for flex */
+}
+.landing-footer p {
+    opacity: 0.8;
+    font-size: 0.875rem;
+}
