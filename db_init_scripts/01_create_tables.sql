@@ -72,10 +72,10 @@ EXECUTE FUNCTION update_updated_at_column();
 -- O sistema de login/registro no app.js precisa ser adaptado para usar bcrypt para o admin também, se desejar.
 INSERT INTO users (name, email, password, cpf, phone, role)
 VALUES (
-    'administrador',                    -- Nome do administrador
-    'admin@techfix.com',                -- Email para login
-    '12345678',        -- Senha (em texto plano, conforme seu app.js)
-    '00000000000',                      -- CPF fictício para o admin (deve ser único)
-    '00000000000',                      -- Telefone fictício
-    'admin'                             -- Papel do usuário
+    'Administrador',                                                        -- Nome do administrador
+    'admin@techfix.com',                                                    -- Email para login
+    '$2a$10$PtxJ20ECgo.bYfhEzezDguVGc8wOc/eQZje0X0MZVNlg.U7gMC6TS',         -- Senha ===== 12345678 
+    '00000000000',                                                          -- CPF fictício para o admin (deve ser único)
+    '00000000000',                                                          -- Telefone fictício
+    'admin'                                                                 -- Papel do usuário
 ) ON CONFLICT (cpf) DO NOTHING; -- Não insere se o CPF do admin já existir

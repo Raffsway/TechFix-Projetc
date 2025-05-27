@@ -259,7 +259,7 @@ class PaginationManager {
   }
   getTotalPages() {
     const filtered = this.services.getFilteredServices();
-    if (this.state.getItemsPerPage() === 0) return 0;
+    if (this.state.getItemsPerPage() === 0) return 0; // Evita divisão por zero
     return Math.ceil(filtered.length / this.state.getItemsPerPage());
   }
   adjustCurrentPageAfterDeletion() {
@@ -267,8 +267,10 @@ class PaginationManager {
     if (this.state.getCurrentPage() > totalPages && totalPages > 0) {
       this.state.setCurrentPage(totalPages);
     } else if (totalPages === 0 && this.state.getServices().length > 0) {
+      // Caso especial: 0 páginas mas ainda há serviços (itens por página > total)
       this.state.setCurrentPage(1);
     } else if (this.state.getServices().length === 0) {
+      // Nenhum serviço
       this.state.setCurrentPage(1);
     }
   }
@@ -358,6 +360,7 @@ class ModalsManager {
     this.confirmDeleteButton = document.getElementById("confirm-delete");
     this._initEventListeners();
   }
+
   _initEventListeners() {
     if (this.closeDetailsButton)
       this.closeDetailsButton.addEventListener("click", () =>
@@ -368,6 +371,7 @@ class ModalsManager {
         if (event.target === this.serviceDetailsModal)
           this.closeServiceDetailsModal();
       });
+
     if (this.cancelDeleteButton)
       this.cancelDeleteButton.addEventListener("click", () =>
         this.closeDeleteConfirmModal()
@@ -377,12 +381,30 @@ class ModalsManager {
         if (event.target === this.deleteConfirmModal)
           this.closeDeleteConfirmModal();
       });
+
+    // CORREÇÃO APLICADA AQUI:
+    if (this.confirmDeleteButton) {
+      this.confirmDeleteButton.addEventListener("click", () => {
+        const serviceIdToDelete = this.state.getServiceToDelete();
+        if (serviceIdToDelete && this.handleDeleteServiceCallback) {
+          this.handleDeleteServiceCallback(serviceIdToDelete);
+        } else {
+          console.warn(
+            "Nenhum ID de serviço para deletar ou callback não definido."
+          );
+          this.closeDeleteConfirmModal(); // Fecha o modal se algo der errado
+        }
+      });
+    }
   }
+
   showServiceDetails(service) {
     if (!this.serviceDetailsModal || !this.modalTitle || !this.modalContent)
       return;
+    // Garante que estamos usando o serviço mais atualizado do estado.
     const serviceData =
       this.state.getServices().find((s) => s.id === service.id) || service;
+
     this.modalTitle.textContent = `Detalhes do Atendimento #${serviceData.id}`;
     const clientName = serviceData.client_name || "N/A";
     const clientCpf = serviceData.client_cpf
@@ -395,6 +417,7 @@ class ModalsManager {
         ? window.formatPhone(serviceData.client_phone)
         : serviceData.client_phone
       : "";
+
     this.modalContent.innerHTML = `
         <div class="flex items-center gap-2 mb-3">
             <svg xmlns="http://www.w3.org/2000/svg" class="text-techfix-light-blue" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
@@ -464,6 +487,7 @@ class ModalsManager {
             </div>
         </div>`;
     this.serviceDetailsModal.classList.remove("hidden");
+
     this.modalContent
       .querySelectorAll(".modal-change-status-btn")
       .forEach((button) => {
@@ -471,22 +495,25 @@ class ModalsManager {
           const newStatus = button.dataset.statusKey;
           const serviceId = parseInt(button.dataset.serviceId, 10);
           if (this.handleStatusChangeCallback) {
-            this.closeServiceDetailsModal();
+            this.closeServiceDetailsModal(); // Fecha o modal de detalhes antes de mudar o status
             this.handleStatusChangeCallback(serviceId, newStatus);
           }
         });
       });
   }
+
   closeServiceDetailsModal() {
     if (this.serviceDetailsModal)
       this.serviceDetailsModal.classList.add("hidden");
   }
+
   showDeleteConfirmModal(id) {
     if (this.deleteConfirmModal) {
       this.state.setServiceToDelete(id);
       this.deleteConfirmModal.classList.remove("hidden");
     }
   }
+
   closeDeleteConfirmModal() {
     if (this.deleteConfirmModal) {
       this.deleteConfirmModal.classList.add("hidden");
@@ -516,6 +543,7 @@ class UIRenderer {
     this.servicesTableBody = document.getElementById("services-table-body");
     this.paginationContainer = document.getElementById("pagination-container");
   }
+
   renderMetrics() {
     if (
       !this.totalServicesElement ||
@@ -528,10 +556,12 @@ class UIRenderer {
     this.inProgressServicesElement.textContent = metrics.inProgress;
     this.finishedServicesElement.textContent = metrics.finished;
   }
+
   renderServicesTable() {
     if (!this.servicesTableBody) return;
     const paginatedServices = this.pagination.getPaginatedServices();
     this.servicesTableBody.innerHTML = "";
+
     if (paginatedServices.length === 0) {
       const emptyRow = document.createElement("tr");
       const filterActive = this.filters.hasActiveFilters();
@@ -549,11 +579,13 @@ class UIRenderer {
     this.renderPagination();
     this.filters.updateFiltersUI();
   }
+
   createServiceRow(service) {
     const row = document.createElement("tr");
     row.className = "hover:bg-gray-50";
     const clientName = service.client_name || "N/A";
     const serviceTypeDisplay = service.service_type || "N/A";
+
     row.innerHTML = `
         <td class="px-4 py-3 font-medium">#${service.id}</td>
         <td class="px-4 py-3">${clientName}</td>
@@ -579,6 +611,7 @@ class UIRenderer {
                 }"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></button>
             </div>
         </td>`;
+
     row.querySelector(".view-details").addEventListener("click", () => {
       const fullService = this.state
         .getServices()
@@ -592,12 +625,59 @@ class UIRenderer {
       );
     return row;
   }
+
   renderPagination() {
-    /* ... (como antes) ... */
+    if (!this.paginationContainer) return;
+    this.paginationContainer.innerHTML = "";
+    const totalPages = this.pagination.getTotalPages();
+    const filteredCount = this.services.getFilteredServices().length;
+
+    if (totalPages <= 1 && filteredCount <= this.state.getItemsPerPage()) {
+      if (filteredCount > 0) {
+        // Só mostra info de paginação se houver itens.
+        this.paginationContainer.appendChild(
+          this.createPaginationInfo(filteredCount, true)
+        );
+      }
+      return;
+    }
+
+    this.paginationContainer.appendChild(
+      this.createPaginationInfo(filteredCount)
+    );
+    if (totalPages > 1) {
+      // Só mostra botões se houver mais de uma página
+      this.paginationContainer.appendChild(
+        this.createPaginationButtons(totalPages)
+      );
+    }
   }
+
   createPaginationInfo(filteredCount, singlePage = false) {
-    /* ... (como antes, incluindo createItemsPerPageSelector) ... */
+    const paginationInfoDiv = document.createElement("div");
+    paginationInfoDiv.className = "flex items-center justify-between mb-4";
+
+    const info = document.createElement("p");
+    info.className = "text-sm text-gray-700";
+    const currentPage = this.state.getCurrentPage();
+    const itemsPerPage = this.state.getItemsPerPage();
+    const start = Math.min((currentPage - 1) * itemsPerPage + 1, filteredCount);
+    const end = Math.min(currentPage * itemsPerPage, filteredCount);
+
+    if (filteredCount > 0) {
+      info.textContent = `Mostrando ${start} a ${end} de ${filteredCount} resultados`;
+    } else {
+      info.textContent = "Nenhum resultado";
+    }
+    paginationInfoDiv.appendChild(info);
+
+    if (!singlePage && filteredCount > itemsPerPage) {
+      // Só mostra seletor se houver mais itens que o limite por página e não for página única
+      paginationInfoDiv.appendChild(this.createItemsPerPageSelector());
+    }
+    return paginationInfoDiv;
   }
+
   createItemsPerPageSelector() {
     const container = document.createElement("div");
     container.className = "flex items-center gap-2";
@@ -605,6 +685,7 @@ class UIRenderer {
     label.textContent = "Itens por página:";
     label.className = "text-sm text-gray-700";
     label.htmlFor = "items-per-page-select";
+
     const select = document.createElement("select");
     select.id = "items-per-page-select";
     select.className = "border rounded-md px-2 py-1 text-sm bg-white";
@@ -623,15 +704,76 @@ class UIRenderer {
     container.appendChild(select);
     return container;
   }
+
   createPaginationButtons(totalPages) {
-    /* ... (como antes) ... */
+    const buttonsContainer = document.createElement("div");
+    buttonsContainer.className = "flex items-center justify-center gap-1";
+
+    buttonsContainer.appendChild(
+      this.createPaginationButton("previous", "Anterior", totalPages)
+    );
+
+    const currentPage = this.state.getCurrentPage();
+    const pagesToShow = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(pagesToShow / 2));
+    let endPage = Math.min(totalPages, startPage + pagesToShow - 1);
+
+    if (totalPages >= pagesToShow && endPage - startPage + 1 < pagesToShow) {
+      if (startPage === 1) {
+        endPage = Math.min(totalPages, pagesToShow);
+      } else if (endPage === totalPages) {
+        startPage = Math.max(1, totalPages - pagesToShow + 1);
+      }
+    }
+
+    if (startPage > 1) {
+      buttonsContainer.appendChild(
+        this.createPaginationButton("page", "1", totalPages, 1)
+      );
+      if (startPage > 2) {
+        const ellipsis = document.createElement("span");
+        ellipsis.className = "px-3 py-1.5 text-gray-700";
+        ellipsis.innerHTML = "&hellip;";
+        buttonsContainer.appendChild(ellipsis);
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      buttonsContainer.appendChild(
+        this.createPaginationButton("page", i.toString(), totalPages, i)
+      );
+    }
+
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) {
+        const ellipsis = document.createElement("span");
+        ellipsis.className = "px-3 py-1.5 text-gray-700";
+        ellipsis.innerHTML = "&hellip;";
+        buttonsContainer.appendChild(ellipsis);
+      }
+      buttonsContainer.appendChild(
+        this.createPaginationButton(
+          "page",
+          totalPages.toString(),
+          totalPages,
+          totalPages
+        )
+      );
+    }
+
+    buttonsContainer.appendChild(
+      this.createPaginationButton("next", "Próxima", totalPages)
+    );
+    return buttonsContainer;
   }
+
   createPaginationButton(type, text, totalPages, pageNumber = null) {
     const button = document.createElement("button");
     const currentPage = this.state.getCurrentPage();
     button.textContent = text;
     button.className =
       "px-3 py-1.5 rounded-md border text-sm min-w-[36px] transition-colors duration-150";
+
     if (type === "previous") {
       button.disabled = currentPage === 1;
       button.addEventListener("click", () => {
@@ -653,25 +795,23 @@ class UIRenderer {
         if (this.pagination.goToPage(pageNumber)) window.adminApp.renderAll();
       });
     }
-    if (button.disabled)
+
+    if (button.disabled) {
       button.className +=
         " bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200";
+    }
     return button;
   }
 }
 
 class AdminDashboardApp {
   constructor() {
-    // --- LÓGICA PADRÃO DO MENU (ELEMENTOS) ---
     this.userMenuButton = document.getElementById("user-menu-button");
     this.userDropdown = document.getElementById("user-dropdown");
     this.userNameDisplay = document.getElementById("user-name-display");
     this.userNameDropdown = document.getElementById("user-name-dropdown");
-    this.logoutButton = document.getElementById("logout-button"); // Certifique-se que este ID existe no admin-dashboard.html
-    this.menuToggleButton = document.getElementById("menu-toggle");
-    this.mainNav = document.getElementById("main-nav");
+    this.logoutButton = document.getElementById("logout-button");
     this.userData = null;
-    // --- FIM DOS ELEMENTOS DO MENU ---
 
     this.state = new StateManager();
     this.services = new ServicesManager(this.state);
@@ -693,12 +833,14 @@ class AdminDashboardApp {
 
   populateUserMenuInfo() {
     if (this.userData) {
-        if (this.userNameDisplay) {
-            this.userNameDisplay.textContent = this.userData.name ? this.userData.name.split(" ")[0] : (this.userData.role === 'admin' ? 'Admin' : 'Usuário');
-        }
-        if (this.userNameDropdown) {
-            this.userNameDropdown.textContent = this.userData.email || "N/A";
-        }
+      if (this.userNameDisplay) {
+        this.userNameDisplay.textContent = this.userData.name
+          ? this.userData.name.split(" ")[0]
+          : "Admin";
+      }
+      if (this.userNameDropdown) {
+        this.userNameDropdown.textContent = this.userData.email || "N/A";
+      }
     }
   }
 
@@ -710,30 +852,20 @@ class AdminDashboardApp {
         this.userMenuButton.setAttribute("aria-expanded", !isHidden);
       });
       document.addEventListener("click", (event) => {
-        if (this.userMenuButton && !this.userMenuButton.contains(event.target) &&
-            this.userDropdown && !this.userDropdown.contains(event.target) &&
-            !this.userDropdown.classList.contains("hidden")) {
+        if (
+          this.userMenuButton &&
+          !this.userMenuButton.contains(event.target) &&
+          this.userDropdown &&
+          !this.userDropdown.contains(event.target) &&
+          !this.userDropdown.classList.contains("hidden")
+        ) {
           this.userDropdown.classList.add("hidden");
           this.userMenuButton.setAttribute("aria-expanded", "false");
         }
       });
     }
-    // CORREÇÃO: Garantir que o listener do logoutButton seja adicionado aqui
     if (this.logoutButton) {
-      this.logoutButton.addEventListener("click", () => this.logoutUser()); // Chamando o método da classe
-    } else {
-        console.warn("Botão de logout (logout-button) não encontrado no adminDashboard.");
-    }
-  }
-
-  setupMobileMenuListener() {
-    if (this.menuToggleButton && this.mainNav) {
-      this.menuToggleButton.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const isHidden = this.mainNav.classList.toggle("hidden");
-        this.mainNav.classList.toggle("flex", !isHidden);
-        this.menuToggleButton.setAttribute("aria-expanded", String(!isHidden));
-      });
+      this.logoutButton.addEventListener("click", () => this.logoutUser());
     }
   }
 
@@ -751,75 +883,112 @@ class AdminDashboardApp {
       this.redirectToLogin("Dados de usuário corrompidos. Faça login.");
       return;
     }
-    
-    if (!this.userData || this.userData.role !== "admin") { // Adicionada verificação de this.userData
+
+    if (!this.userData || this.userData.role !== "admin") {
       this.redirectToLogin("Acesso não autorizado para este painel.");
       return;
     }
 
     this.populateUserMenuInfo();
-    this.setupUserMenuListeners(); // Isso agora configura o logout também
-    this.setupMobileMenuListener();
+    this.setupUserMenuListeners();
 
     await this.services.fetchServices();
     this.renderAll();
-    this.setupEventListeners(); // Listeners de filtros, etc.
+    this.setupEventListeners();
   }
 
   redirectToLogin(toastMessage = "Acesso não autorizado.") {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    if (typeof window.showToast === "function") window.showToast(toastMessage, "error");
-    // Aumentar o tempo para o toast ser visível
-    setTimeout(() => { window.location.href = "/login"; }, 2000); // Aumentado para 2 segundos
+    if (typeof window.showToast === "function")
+      window.showToast(toastMessage, "error");
+    setTimeout(() => {
+      window.location.href = "/login";
+    }, 2000);
   }
 
   logoutUser() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    if (typeof window.showToast === "function") window.showToast("Sessão encerrada com sucesso!", "success");
-    // Aumentar o tempo para o toast ser visível
-    setTimeout(() => { window.location.href = "/login"; }, 2000); // Aumentado para 2 segundos
+    if (typeof window.showToast === "function")
+      window.showToast("Sessão encerrada com sucesso!", "success");
+    setTimeout(() => {
+      window.location.href = "/login";
+    }, 2000);
   }
 
-  // ... (resto dos métodos da classe AdminDashboardApp: setupEventListeners, handleStatusChange, handleDeleteService, renderAll)
-  // Certifique-se de que eles estejam aqui conforme sua última versão funcional.
-  // Exemplo:
-    setupEventListeners() {
-    if (this.filters.searchInput) { this.filters.searchInput.addEventListener("input", (e) => { this.filters.handleSearchChange(e.target.value); this.renderAll(); }); }
-    if (this.filters.statusFilterSelect) { this.filters.statusFilterSelect.addEventListener("change", (e) => { this.filters.handleStatusFilterChange(e.target.value); this.renderAll(); }); }
-    if (this.filters.dateFilterInput) { this.filters.dateFilterInput.addEventListener("change", (e) => { this.filters.handleDateFilterChange(e.target.value); this.renderAll(); }); }
-    if (this.filters.clearFiltersButton) { this.filters.clearFiltersButton.addEventListener("click", () => { this.filters.clearFiltersAndUI(); this.renderAll(); }); }
-    if (this.modals.confirmDeleteButton) { this.modals.confirmDeleteButton.addEventListener("click", async () => { const serviceId = this.state.getServiceToDelete(); if (serviceId) { await this.handleDeleteService(serviceId); } }); }
+  setupEventListeners() {
+    if (this.filters.clearFiltersButton) {
+      this.filters.clearFiltersButton.addEventListener("click", () => {
+        this.filters.clearFiltersAndUI();
+        this.renderAll();
+      });
+    }
+
+    if (this.filters.searchInput) {
+      let searchDebounceTimer;
+      this.filters.searchInput.addEventListener("input", (e) => {
+        clearTimeout(searchDebounceTimer);
+        const query = e.target.value;
+        searchDebounceTimer = setTimeout(() => {
+          this.filters.handleSearchChange(query);
+          this.renderAll();
+        }, 300);
+      });
+    }
+
+    if (this.filters.statusFilterSelect) {
+      this.filters.statusFilterSelect.addEventListener("change", (e) => {
+        this.filters.handleStatusFilterChange(e.target.value);
+        this.renderAll();
+      });
+    }
+
+    if (this.filters.dateFilterInput) {
+      this.filters.dateFilterInput.addEventListener("change", (e) => {
+        this.filters.handleDateFilterChange(e.target.value);
+        this.renderAll();
+      });
+    }
+    // O listener para o botão de confirmação de exclusão agora está DENTRO da classe ModalsManager.
   }
+
   async handleStatusChange(serviceId, newStatus) {
-    const updatedService = await this.services.updateServiceStatus(serviceId,newStatus);
+    const updatedService = await this.services.updateServiceStatus(
+      serviceId,
+      newStatus
+    );
     if (updatedService) {
-      if (typeof window.showToast === "function") window.showToast( `Status do serviço #${serviceId} atualizado para "${window.statusLabels[newStatus]}".`, "success");
       this.renderAll();
+      if (typeof window.showToast === "function")
+        window.showToast("Status do serviço atualizado!", "success");
     }
   }
+
   async handleDeleteService(serviceId) {
+    if (!serviceId) {
+      if (typeof window.showToast === "function")
+        window.showToast("ID do serviço inválido para exclusão.", "error");
+      this.modals.closeDeleteConfirmModal();
+      return;
+    }
     const success = await this.services.deleteService(serviceId);
     this.modals.closeDeleteConfirmModal();
+
     if (success) {
-      if (typeof window.showToast === "function") window.showToast( `Serviço #${serviceId} excluído com sucesso.`, "success");
       this.pagination.adjustCurrentPageAfterDeletion();
       this.renderAll();
+      if (typeof window.showToast === "function")
+        window.showToast("Serviço excluído com sucesso!", "success");
     }
   }
+
   renderAll() {
     this.ui.renderMetrics();
     this.ui.renderServicesTable();
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  if (document.body.classList.contains("admin-dashboard-page")) {
-    window.adminApp = new AdminDashboardApp();
-    window.adminApp.init();
-  }
-});
 document.addEventListener("DOMContentLoaded", () => {
   if (document.body.classList.contains("admin-dashboard-page")) {
     window.adminApp = new AdminDashboardApp();
